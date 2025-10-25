@@ -1,0 +1,17 @@
+{
+  "name": "sketch-guess",
+  "version": "1.0.0",
+  "description": "This project is built to be submitted to Avalanche fuckingship.",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^5.1.0",
+    "socket.io": "^4.8.1"
+  }
+}
