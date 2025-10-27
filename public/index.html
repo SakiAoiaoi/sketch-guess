@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sketch Guess (alpha)</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <header>
+    <h1>Sketch Guess ✏️</h1>
+    <div class="goal">
+      <span id="prompt">Loading…</span>
+      <button id="newWord">🎲 New word</button>
+      <button id="shareLink">🔗 Share this word</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="canvas-wrap">
+      <canvas id="c" width="360" height="280"></canvas>
+      <div class="tools">
+        <button id="penBtn">🖊️ Pen</button>
+        <button id="eraserBtn">🩹 Eraser</button>
+        <button id="clearBtn">🧽 Clear</button>
+      </div>
+    </section>
+
+    <section class="guess-wrap">
+      <input id="guess" placeholder="Type your guess…" autocomplete="off" />
+      <button id="check">Check ✅</button>
+      <div id="msg"></div>
+      <div class="stats">
+        <span id="count">Correct: 0</span>
+        <span id="best">Best: –</span>
+        <span id="timer">Time: 0s</span>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <small>
+      Tip: Send the 🔗 link to a friend (it fixes the word in the URL).
+    </small>
+  </footer>
+
+  <script src="./app.js"></script>
+</body>
+</html>
