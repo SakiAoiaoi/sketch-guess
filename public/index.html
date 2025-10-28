@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Sketch Guess (alpha)</title>
+  <meta name="description" content="Sketch & guess game. Rooms + realtime drawing sync with socket.io." />
   <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
@@ -44,6 +45,9 @@
     </small>
   </footer>
 
+  <!-- ★ Realtime用（server.js が提供）-->
+  <script src="/socket.io/socket.io.js"></script>
+  <!-- あなたのアプリ本体 -->
   <script src="./app.js"></script>
 </body>
 </html>

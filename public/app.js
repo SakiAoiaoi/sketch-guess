@@ -32,7 +32,6 @@ function getParam(name) {
 function ensureRoom() {
   let room = getParam("room");
   if (!room) {
-    // ランダムな6桁IDを生成
     room = Math.floor(100000 + Math.random() * 900000).toString();
     const url = new URL(location.href);
     url.searchParams.set("room", room);
@@ -42,19 +41,16 @@ function ensureRoom() {
 }
 const currentRoom = ensureRoom();
 
-// 画面上部にルーム表示
-function showRoomBanner(room) {
-  const roomBanner = document.createElement("div");
-  roomBanner.textContent = `🎮 Room: ${room}`;
-  roomBanner.style = "margin:8px 0;padding:6px 10px;background:#eee;border-radius:8px;font-weight:bold;";
-  document.body.prepend(roomBanner);
-}
-showRoomBanner(currentRoom);
+// banner
+(function showRoomBanner(room) {
+  const div = document.createElement("div");
+  div.textContent = `🎮 Room: ${room}`;
+  div.style = "margin:8px 0;padding:6px 10px;background:#eee;border-radius:8px;font-weight:bold;";
+  document.body.prepend(div);
+})(currentRoom);
 
 // ——— utils ———
-function randWord() {
-  return WORDS[Math.floor(Math.random() * WORDS.length)];
-}
+function randWord() { return WORDS[Math.floor(Math.random() * WORDS.length)]; }
 function sec(n) { return `${n}s`; }
 function setStroke() {
   ctx.lineWidth = erasing ? 16 : 3;
@@ -70,10 +66,7 @@ function startTimer() {
     timerEl.textContent = `Time: ${sec(s)}`;
   }, 200);
 }
-function stopTimer() {
-  if (timerId) clearInterval(timerId);
-  timerId = null;
-}
+function stopTimer() { if (timerId) clearInterval(timerId); timerId = null; }
 function loadStats() {
   const c = Number(localStorage.getItem(LS_KEYS.correct)) || 0;
   const b = Number(localStorage.getItem(LS_KEYS.best)) || 0;
@@ -99,7 +92,7 @@ function newRandomWord() {
   const w = randWord();
   const url = new URL(location.href);
   url.searchParams.set("word", w);
-  url.searchParams.set("room", currentRoom); // ルームは維持
+  url.searchParams.set("room", currentRoom);
   history.replaceState({}, "", url);
   setWord(w);
 }
@@ -110,17 +103,19 @@ function shareCurrent() {
   navigator.clipboard.writeText(url.href).then(() => {
     msgEl.textContent = "🔗 Link copied!";
     setTimeout(() => (msgEl.textContent = ""), 1200);
-  }).catch(() => {
-    msgEl.textContent = url.href;
-  });
+  }).catch(() => { msgEl.textContent = url.href; });
 }
 
-// ——— canvas ———
+// ——— canvas helpers ———
 function clearCanvas() {
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, c.width, c.height);
   setStroke();
 }
+// 端末差を吸収するため座標は 0..1 に正規化して送る
+function toNorm({x, y}) { return { nx: x / c.width, ny: y / c.height }; }
+function fromNorm({nx, ny}) { return { x: nx * c.width, y: ny * c.height }; }
+
 function pos(e) {
   if (e.touches && e.touches[0]) {
     const rect = c.getBoundingClientRect();
@@ -131,20 +126,56 @@ function pos(e) {
   }
   return { x: e.offsetX, y: e.offsetY };
 }
-function down(e) {
-  drawing = true;
+
+// ——— socket.io (optional fallback) ———
+const socket = (typeof io !== "undefined") ? io() : null;
+if (socket) socket.emit("joinRoom", currentRoom);
+
+// 送信ユーティリティ
+function emit(type, payload) {
+  if (!socket) return;
+  socket.emit(type, Object.assign({ roomId: currentRoom }, payload));
+}
+
+// ——— drawing (local) ———
+function beginPathAt(x, y, useEraser=false) {
+  // 受信側用にツールも反映
+  const prev = erasing;
+  erasing = !!useEraser;
   setStroke();
-  const { x, y } = pos(e);
   ctx.beginPath();
   ctx.moveTo(x, y);
+  erasing = prev; // 自分の状態は保持
 }
-function move(e) {
-  if (!drawing) return;
-  const { x, y } = pos(e);
+function drawLineTo(x, y) {
+  setStroke();
   ctx.lineTo(x, y);
   ctx.stroke();
 }
-function up() { drawing = false; }
+
+function down(e) {
+  drawing = true;
+  const p = pos(e);
+  setStroke();
+  ctx.beginPath();
+  ctx.moveTo(p.x, p.y);
+
+  // 他参加者へ "begin"
+  emit("begin", { point: toNorm(p), eraser: erasing });
+}
+function move(e) {
+  if (!drawing) return;
+  const p = pos(e);
+  ctx.lineTo(p.x, p.y);
+  ctx.stroke();
+
+  // 他参加者へ "draw"
+  emit("draw", { point: toNorm(p) });
+}
+function up() {
+  drawing = false;
+  emit("end", {});
+}
 
 // ——— guess ———
 function check() {
@@ -162,6 +193,7 @@ function check() {
 
 // ——— wire ———
 window.addEventListener("load", () => {
+  // devicePixelRatio に合わせて内部解像度を上げる
   const ratio = Math.max(1, Math.floor(window.devicePixelRatio || 1));
   c.width = c.width * ratio;
   c.height = c.height * ratio;
@@ -181,12 +213,12 @@ window.addEventListener("load", () => {
   // touch
   c.addEventListener("touchstart", (e) => { e.preventDefault(); down(e); }, { passive:false });
   c.addEventListener("touchmove",  (e) => { e.preventDefault(); move(e); }, { passive:false });
-  c.addEventListener("touchend",   (e) => { e.preventDefault(); up(e); },   { passive:false });
+  c.addEventListener("touchend",   (e) => { e.preventDefault(); up(); },   { passive:false });
 
   // tools
   penBtn.onclick = () => { erasing = false; setStroke(); };
   eraserBtn.onclick = () => { erasing = true; setStroke(); };
-  clearBtn.onclick = clearCanvas;
+  clearBtn.onclick = () => { clearCanvas(); emit("clear", {}); };
 
   // word + share
   newWordBtn.onclick = newRandomWord;
@@ -194,7 +226,19 @@ window.addEventListener("load", () => {
 
   // guess
   checkBtn.onclick = check;
-  guessInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") check();
-  });
+  guessInput.addEventListener("keydown", (e) => { if (e.key === "Enter") check(); });
 });
+
+// ——— socket receivers ———
+if (socket) {
+  socket.on("begin", ({ point, eraser }) => {
+    const p = fromNorm(point);
+    beginPathAt(p.x, p.y, eraser);
+  });
+  socket.on("draw", ({ point }) => {
+    const p = fromNorm(point);
+    drawLineTo(p.x, p.y);
+  });
+  socket.on("end", () => { /* no-op for now */ });
+  socket.on("clear", () => { clearCanvas(); });
+}
