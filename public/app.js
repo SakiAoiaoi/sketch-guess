@@ -25,12 +25,35 @@ const countEl = document.getElementById("count");
 const bestEl = document.getElementById("best");
 const timerEl = document.getElementById("timer");
 
+// ——— room handling ———
+function getParam(name) {
+  return new URLSearchParams(location.search).get(name);
+}
+function ensureRoom() {
+  let room = getParam("room");
+  if (!room) {
+    // ランダムな6桁IDを生成
+    room = Math.floor(100000 + Math.random() * 900000).toString();
+    const url = new URL(location.href);
+    url.searchParams.set("room", room);
+    history.replaceState({}, "", url);
+  }
+  return room;
+}
+const currentRoom = ensureRoom();
+
+// 画面上部にルーム表示
+function showRoomBanner(room) {
+  const roomBanner = document.createElement("div");
+  roomBanner.textContent = `🎮 Room: ${room}`;
+  roomBanner.style = "margin:8px 0;padding:6px 10px;background:#eee;border-radius:8px;font-weight:bold;";
+  document.body.prepend(roomBanner);
+}
+showRoomBanner(currentRoom);
+
 // ——— utils ———
 function randWord() {
   return WORDS[Math.floor(Math.random() * WORDS.length)];
-}
-function getParam(name) {
-  return new URLSearchParams(location.search).get(name);
 }
 function sec(n) { return `${n}s`; }
 function setStroke() {
@@ -76,17 +99,18 @@ function newRandomWord() {
   const w = randWord();
   const url = new URL(location.href);
   url.searchParams.set("word", w);
+  url.searchParams.set("room", currentRoom); // ルームは維持
   history.replaceState({}, "", url);
   setWord(w);
 }
 function shareCurrent() {
   const url = new URL(location.href);
   url.searchParams.set("word", answer);
+  url.searchParams.set("room", currentRoom);
   navigator.clipboard.writeText(url.href).then(() => {
     msgEl.textContent = "🔗 Link copied!";
     setTimeout(() => (msgEl.textContent = ""), 1200);
   }).catch(() => {
-    // fallback: show the URL
     msgEl.textContent = url.href;
   });
 }
@@ -130,7 +154,7 @@ function check() {
   if (g === answer) {
     msgEl.textContent = `✅ Correct! ${sec(elapsed)}`;
     updateStats(elapsed);
-    startTimer(); // next round timing (keeps counting if user keeps playing)
+    startTimer();
   } else {
     msgEl.textContent = "❌ Try again";
   }
@@ -138,7 +162,6 @@ function check() {
 
 // ——— wire ———
 window.addEventListener("load", () => {
-  // set canvas to device pixel ratio for crisp lines
   const ratio = Math.max(1, Math.floor(window.devicePixelRatio || 1));
   c.width = c.width * ratio;
   c.height = c.height * ratio;
