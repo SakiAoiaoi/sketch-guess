@@ -5,7 +5,7 @@ const LS_KEYS = { correct: "sg_correctCount", best: "sg_bestTimeSec" };
 // ——— state ———
 let answer = "";
 let drawing = false;
-let erasing = false;
+let erasing = false;         // ローカルの消しゴムフラグ（同期は最小限に）
 let startTime = Date.now();
 let timerId = null;
 
@@ -127,32 +127,23 @@ function pos(e) {
   return { x: e.offsetX, y: e.offsetY };
 }
 
-// ——— socket.io (optional fallback) ———
+// ——— socket.io ———
 const socket = (typeof io !== "undefined") ? io() : null;
-if (socket) socket.emit("joinRoom", currentRoom);
 
-// 送信ユーティリティ
-function emit(type, payload) {
+// 接続できたら部屋に参加（確実に join を送る）
+if (socket) {
+  socket.on("connect", () => {
+    socket.emit("joinRoom", currentRoom);
+  });
+}
+
+// 送信ユーティリティ（roomキーで統一）
+function emit(type, payload = {}) {
   if (!socket) return;
-  socket.emit(type, Object.assign({ roomId: currentRoom }, payload));
+  socket.emit(type, { room: currentRoom, ...payload });
 }
 
 // ——— drawing (local) ———
-function beginPathAt(x, y, useEraser=false) {
-  // 受信側用にツールも反映
-  const prev = erasing;
-  erasing = !!useEraser;
-  setStroke();
-  ctx.beginPath();
-  ctx.moveTo(x, y);
-  erasing = prev; // 自分の状態は保持
-}
-function drawLineTo(x, y) {
-  setStroke();
-  ctx.lineTo(x, y);
-  ctx.stroke();
-}
-
 function down(e) {
   drawing = true;
   const p = pos(e);
@@ -160,8 +151,8 @@ function down(e) {
   ctx.beginPath();
   ctx.moveTo(p.x, p.y);
 
-  // 他参加者へ "begin"
-  emit("begin", { point: toNorm(p), eraser: erasing });
+  // 他参加者へ "begin"（正規化座標で送る）
+  emit("begin", { point: toNorm(p) });
 }
 function move(e) {
   if (!drawing) return;
@@ -174,7 +165,7 @@ function move(e) {
 }
 function up() {
   drawing = false;
-  emit("end", {});
+  emit("end");
 }
 
 // ——— guess ———
@@ -217,8 +208,8 @@ window.addEventListener("load", () => {
 
   // tools
   penBtn.onclick = () => { erasing = false; setStroke(); };
-  eraserBtn.onclick = () => { erasing = true; setStroke(); };
-  clearBtn.onclick = () => { clearCanvas(); emit("clear", {}); };
+  eraserBtn.onclick = () => { erasing = true; setStroke(); };  // 今は同期しない簡易版
+  clearBtn.onclick = () => { clearCanvas(); emit("clear"); };
 
   // word + share
   newWordBtn.onclick = newRandomWord;
@@ -231,14 +222,16 @@ window.addEventListener("load", () => {
 
 // ——— socket receivers ———
 if (socket) {
-  socket.on("begin", ({ point, eraser }) => {
+  socket.on("begin", ({ point }) => {
     const p = fromNorm(point);
-    beginPathAt(p.x, p.y, eraser);
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y);
   });
   socket.on("draw", ({ point }) => {
     const p = fromNorm(point);
-    drawLineTo(p.x, p.y);
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
   });
-  socket.on("end", () => { /* no-op for now */ });
+  socket.on("end", () => { /* path close不要。lineToで継続 */ });
   socket.on("clear", () => { clearCanvas(); });
 }
