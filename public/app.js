@@ -1,11 +1,17 @@
 // ——— settings ———
-const WORDS = ["apple","cat","car","house","tree","boat","sun","cloud","fish","phone","book","star","dog","cup","bird","leaf"];
-const LS_KEYS = { correct: "sg_correctCount", best: "sg_bestTimeSec" };
+const WORDS = [
+  "apple","cat","car","house","tree","boat","sun","cloud","fish","phone",
+  "book","star","dog","cup","bird","leaf"
+];
+const LS_KEYS = {
+  correct: "sg_correctCount",
+  best: "sg_bestTimeSec",
+};
 
 // ——— state ———
 let answer = "";
 let drawing = false;
-let erasing = false;         // ローカルの消しゴムフラグ（同期は最小限に）
+let erasing = false;     // ローカルの消しゴムフラグ（同期は最低限）
 let startTime = Date.now();
 let timerId = null;
 
@@ -29,6 +35,7 @@ const timerEl = document.getElementById("timer");
 function getParam(name) {
   return new URLSearchParams(location.search).get(name);
 }
+
 function ensureRoom() {
   let room = getParam("room");
   if (!room) {
@@ -39,6 +46,7 @@ function ensureRoom() {
   }
   return room;
 }
+
 const currentRoom = ensureRoom();
 
 // banner
@@ -50,14 +58,21 @@ const currentRoom = ensureRoom();
 })(currentRoom);
 
 // ——— utils ———
-function randWord() { return WORDS[Math.floor(Math.random() * WORDS.length)]; }
-function sec(n) { return `${n}s`; }
+function randWord() {
+  return WORDS[Math.floor(Math.random() * WORDS.length)];
+}
+
+function sec(n) {
+  return `${n}s`;
+}
+
 function setStroke() {
   ctx.lineWidth = erasing ? 16 : 3;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
   ctx.strokeStyle = erasing ? "#ffffff" : "#111111";
 }
+
 function startTimer() {
   stopTimer();
   startTime = Date.now();
@@ -66,18 +81,26 @@ function startTimer() {
     timerEl.textContent = `Time: ${sec(s)}`;
   }, 200);
 }
-function stopTimer() { if (timerId) clearInterval(timerId); timerId = null; }
+
+function stopTimer() {
+  if (timerId) clearInterval(timerId);
+  timerId = null;
+}
+
 function loadStats() {
   const c = Number(localStorage.getItem(LS_KEYS.correct)) || 0;
   const b = Number(localStorage.getItem(LS_KEYS.best)) || 0;
   countEl.textContent = `Correct: ${c}`;
   bestEl.textContent = `Best: ${b > 0 ? sec(b) : "–"}`;
 }
+
 function updateStats(elapsedSec) {
   const c = Number(localStorage.getItem(LS_KEYS.correct)) || 0;
   localStorage.setItem(LS_KEYS.correct, c + 1);
   const best = Number(localStorage.getItem(LS_KEYS.best)) || 0;
-  if (!best || elapsedSec < best) localStorage.setItem(LS_KEYS.best, elapsedSec);
+  if (!best || elapsedSec < best) {
+    localStorage.setItem(LS_KEYS.best, elapsedSec);
+  }
   loadStats();
 }
 
@@ -88,6 +111,7 @@ function setWord(w) {
   startTimer();
   clearCanvas();
 }
+
 function newRandomWord() {
   const w = randWord();
   const url = new URL(location.href);
@@ -96,14 +120,19 @@ function newRandomWord() {
   history.replaceState({}, "", url);
   setWord(w);
 }
+
 function shareCurrent() {
   const url = new URL(location.href);
   url.searchParams.set("word", answer);
   url.searchParams.set("room", currentRoom);
-  navigator.clipboard.writeText(url.href).then(() => {
-    msgEl.textContent = "🔗 Link copied!";
-    setTimeout(() => (msgEl.textContent = ""), 1200);
-  }).catch(() => { msgEl.textContent = url.href; });
+  navigator.clipboard.writeText(url.href)
+    .then(() => {
+      msgEl.textContent = "🔗 Link copied!";
+      setTimeout(() => (msgEl.textContent = ""), 1200);
+    })
+    .catch(() => {
+      msgEl.textContent = url.href;
+    });
 }
 
 // ——— canvas helpers ———
@@ -112,9 +141,14 @@ function clearCanvas() {
   ctx.fillRect(0, 0, c.width, c.height);
   setStroke();
 }
-// 端末差を吸収するため座標は 0..1 に正規化して送る
-function toNorm({x, y}) { return { nx: x / c.width, ny: y / c.height }; }
-function fromNorm({nx, ny}) { return { x: nx * c.width, y: ny * c.height }; }
+
+// 正規化して送る
+function toNorm({ x, y }) {
+  return { nx: x / c.width, ny: y / c.height };
+}
+function fromNorm({ nx, ny }) {
+  return { x: nx * c.width, y: ny * c.height };
+}
 
 function pos(e) {
   if (e.touches && e.touches[0]) {
@@ -128,16 +162,17 @@ function pos(e) {
 }
 
 // ——— socket.io ———
+// ここ重要：URLを直書きせず io() にすることで Cloudflare のドメインでも動く
 const socket = (typeof io !== "undefined") ? io() : null;
 
-// 接続できたら部屋に参加（確実に join を送る）
+// 接続できたら部屋に参加
 if (socket) {
   socket.on("connect", () => {
     socket.emit("joinRoom", currentRoom);
   });
 }
 
-// 送信ユーティリティ（roomキーで統一）
+// 送信用ヘルパー（roomを必ず付ける）
 function emit(type, payload = {}) {
   if (!socket) return;
   socket.emit(type, { room: currentRoom, ...payload });
@@ -151,18 +186,20 @@ function down(e) {
   ctx.beginPath();
   ctx.moveTo(p.x, p.y);
 
-  // 他参加者へ "begin"（正規化座標で送る）
+  // 他参加者に「描き始めたよ」
   emit("begin", { point: toNorm(p) });
 }
+
 function move(e) {
   if (!drawing) return;
   const p = pos(e);
   ctx.lineTo(p.x, p.y);
   ctx.stroke();
 
-  // 他参加者へ "draw"
+  // 他参加者に「今ここまで描いたよ」
   emit("draw", { point: toNorm(p) });
 }
+
 function up() {
   drawing = false;
   emit("end");
@@ -184,7 +221,7 @@ function check() {
 
 // ——— wire ———
 window.addEventListener("load", () => {
-  // devicePixelRatio に合わせて内部解像度を上げる
+  // 高DPI対応
   const ratio = Math.max(1, Math.floor(window.devicePixelRatio || 1));
   c.width = c.width * ratio;
   c.height = c.height * ratio;
@@ -201,14 +238,15 @@ window.addEventListener("load", () => {
   c.addEventListener("mousemove", move);
   c.addEventListener("mouseup", up);
   c.addEventListener("mouseleave", up);
+
   // touch
-  c.addEventListener("touchstart", (e) => { e.preventDefault(); down(e); }, { passive:false });
-  c.addEventListener("touchmove",  (e) => { e.preventDefault(); move(e); }, { passive:false });
-  c.addEventListener("touchend",   (e) => { e.preventDefault(); up(); },   { passive:false });
+  c.addEventListener("touchstart", (e) => { e.preventDefault(); down(e); }, { passive: false });
+  c.addEventListener("touchmove",  (e) => { e.preventDefault(); move(e); }, { passive: false });
+  c.addEventListener("touchend",   (e) => { e.preventDefault(); up(); },   { passive: false });
 
   // tools
   penBtn.onclick = () => { erasing = false; setStroke(); };
-  eraserBtn.onclick = () => { erasing = true; setStroke(); };  // 今は同期しない簡易版
+  eraserBtn.onclick = () => { erasing = true; setStroke(); };
   clearBtn.onclick = () => { clearCanvas(); emit("clear"); };
 
   // word + share
@@ -217,7 +255,9 @@ window.addEventListener("load", () => {
 
   // guess
   checkBtn.onclick = check;
-  guessInput.addEventListener("keydown", (e) => { if (e.key === "Enter") check(); });
+  guessInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") check();
+  });
 });
 
 // ——— socket receivers ———
@@ -227,11 +267,18 @@ if (socket) {
     ctx.beginPath();
     ctx.moveTo(p.x, p.y);
   });
+
   socket.on("draw", ({ point }) => {
     const p = fromNorm(point);
     ctx.lineTo(p.x, p.y);
     ctx.stroke();
   });
-  socket.on("end", () => { /* path close不要。lineToで継続 */ });
-  socket.on("clear", () => { clearCanvas(); });
+
+  socket.on("end", () => {
+    // path closeは不要。lineToでつながる
+  });
+
+  socket.on("clear", () => {
+    clearCanvas();
+  });
 }
